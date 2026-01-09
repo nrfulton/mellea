@@ -17,17 +17,18 @@ from typing import Any, Protocol, TypeVar, Union, runtime_checkable
 from PIL import Image as PILImage
 
 from mellea.helpers.fancy_logger import FancyLogger
+from mellea.security.core import SecLevel, Taintable, Unclassified
 
 
-class CBlock:
+class CBlock(Taintable):
     """A `CBlock` is a block of content that can serve as input to or output from an LLM."""
 
     def __init__(
         self,
         value: str | None,
         meta: dict[str, Any] | None = None,
-        sec_level: Any = None,
         *,
+        sec_level: SecLevel | None = None,
         cache: bool = False,
     ):
         """Initializes the CBlock with a string and some metadata.
@@ -45,6 +46,8 @@ class CBlock:
         if meta is None:
             meta = {}
         self._meta = meta
+
+        self.sec_level = sec_level if self.sec_level is not None else Unclassified()
 
         # Set security metadata if sec_level is provided
         if sec_level is not None:
@@ -154,7 +157,7 @@ class ImageBlock:
 
 
 @runtime_checkable
-class Component(Protocol):
+class Component(Protocol, Taintable):
     """A `Component` is a composite data structure that is intended to be represented to an LLM."""
 
     def parts(self) -> list[Component | CBlock]:
@@ -225,7 +228,7 @@ class GenerateType(enum.Enum):
     SYNC = 2
 
 
-class ModelOutputThunk(CBlock):
+class ModelOutputThunk(CBlock, Taintable):
     """A `ModelOutputThunk` is a special type of `CBlock` that we know came from a model's output. It is possible to instantiate one without the output being computed yet."""
 
     def __init__(
@@ -234,9 +237,10 @@ class ModelOutputThunk(CBlock):
         meta: dict[str, Any] | None = None,
         parsed_repr: CBlock | Component | Any | None = None,
         tool_calls: dict[str, ModelToolCall] | None = None,
+        sec_level: SecLevel | None = None,
     ):
         """Initializes as a cblock, optionally also with a parsed representation from an output formatter."""
-        super().__init__(value, meta)
+        super().__init__(value, meta, sec_level)
         self.parsed_repr: CBlock | Component | Any | None = parsed_repr
 
         # Set computed to True if a value is passed in.
