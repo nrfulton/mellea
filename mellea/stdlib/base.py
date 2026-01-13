@@ -23,9 +23,9 @@ S = typing_extensions.TypeVar("S", default=Any, covariant=True)
 C = typing_extensions.TypeVar("C", default=str)
 """Used for component typing in function parameters where the function takes a Component[C] and/or CBlock and can return a ModelOutputThunk[C]. Defaults to `str`."""
 
+
 class ComponentParseError(Exception):
     """Raised by `Component.parse()` when the underlying parsing method throws an exception."""
-    pass
 
 
 # For ModelOutputThunk return types to be typed correctly, CBlocks must be defined
@@ -670,6 +670,7 @@ class TemplateRepresentation:
         str,
         str | Component | CBlock | Iterable | Mapping | TemplateRepresentation | None,
     ]
+    role: str | None = None
     tools: dict[str, Callable] | None = (
         None  # the key must be the name of the function.
     )
