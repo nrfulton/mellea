@@ -65,7 +65,8 @@ class Formatter(abc.ABC):
                     tr = c.format_for_llm()
                     if isinstance(tr, TemplateRepresentation):
                         images = tr.images
-                        role = tr.role if tr.role is not None else role
+                        # Allow components that specify their role to not be in the Literal
+                        role = tr.role if tr.role is not None else role  # type: ignore
 
                     # components can have images
                     return Message(role=role, content=self.print(c), images=images)
