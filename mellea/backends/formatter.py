@@ -65,6 +65,7 @@ class Formatter(abc.ABC):
                     tr = c.format_for_llm()
                     if isinstance(tr, TemplateRepresentation):
                         images = tr.images
+                        role = tr.role if tr.role is not None else role
 
                     # components can have images
                     return Message(role=role, content=self.print(c), images=images)
