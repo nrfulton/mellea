@@ -154,6 +154,10 @@ class Component(Protocol, Generic[S]):
         raise NotImplementedError("format_for_llm isn't implemented by default")
 
     def parse(self, computed: ModelOutputThunk) -> S:
+        """Parse the expected type from a given `ModelOutputThunk`.
+
+        Calls the Component's underlying `._parse` function.
+        """
         try:
             return self._parse(computed)
         except Exception as e:
