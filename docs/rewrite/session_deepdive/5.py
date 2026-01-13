@@ -12,9 +12,9 @@ import asyncio
 
 
 async def main(backend: Backend, ctx: Context):
-    x, _ = await backend.generate_from_context(CBlock("What is 1+1?"), ctx=ctx)
+    x, ctx0 = await backend.generate_from_context(CBlock("What is 1+1?"), ctx=ctx)
 
-    y, _ = await backend.generate_from_context(CBlock("What is 2+2?"), ctx=ctx)
+    y, ctx1 = await backend.generate_from_context(CBlock("What is 2+2?"), ctx=ctx)
 
     # here, x and y have not necessarily been computed!
 

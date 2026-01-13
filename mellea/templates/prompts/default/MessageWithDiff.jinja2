@@ -1,0 +1,14 @@
+{%- block content %}
+{%- if content -%}
+  {{- content -}}
+{%- endif -%}
+{% endblock content %}
+
+{%- block diffs -%}
+{%- if diffs|length > 0 %}
+Diffs:
+{%- for diff in diffs %}
+* {{ diff -}}
+{% endfor %}
+{%- endif -%}
+{% endblock diffs %}
