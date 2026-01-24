@@ -8,7 +8,7 @@ from mellea.stdlib.requirements import req
 from mellea.stdlib.session import start_session
 from mellea import MelleaSession
 import mellea.stdlib.functional as mfuncs
-from mellea.core import CBlock
+from mellea.core import CBlock, ModelOutputThunk
 
 
 @pytest.fixture(scope="module")
@@ -69,6 +69,14 @@ async def test_aact_on_cblock(m_session):
     result, _ = mfuncs.act(CBlock("What is 1+1?"), ctx, backend)
     assert "2" in result.value or "two" in result.value
 
+
+@pytest.mark.qualitative
+async def test_aact_on_mot(m_session):
+    m: MelleaSession = m_session
+    backend, ctx = m.backend, m.ctx  # type: ignore
+    mot = ModelOutputThunk(value="1+1=2")
+    result, _ = mfuncs.act(mot, ctx, backend)
+    assert "2" in result.value or "two" in result.value
 
 
 if __name__ == "__main__":
