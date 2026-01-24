@@ -66,10 +66,9 @@ async def test_avalidate(m_session):
 async def test_aact_on_cblock(m_session):
     m: MelleaSession = m_session
     backend, ctx = m.backend, m.ctx  # type: ignore
-
-    result, _ = await backend.generate_from_context(action=CBlock("What is 1+1?"), ctx=ctx, model_options={ModelOption.MAX_NEW_TOKENS: 65})
-    await result.avalue()
+    result, _ = mfuncs.act(CBlock("What is 1+1?"), ctx, backend)
     assert "2" in result.value or "two" in result.value
+
 
 
 if __name__ == "__main__":
