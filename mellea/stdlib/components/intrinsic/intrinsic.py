@@ -1,7 +1,54 @@
 """Module for Intrinsics."""
 
+import abc
+from typing import Generic
+
 from ....backends.adapters import AdapterType, fetch_intrinsic_metadata
-from ....core import CBlock, Component, ModelOutputThunk, TemplateRepresentation
+from ....backends.adapters.adapter import Adapter
+from ....core import CBlock, Component, ModelOutputThunk, S, TemplateRepresentation
+
+
+class AdapterBackedComponent(Generic[S], Component[S], abc.ABC):
+    """A component that is backed by an Adapter."""
+
+    def __init__(
+        self,
+        adapter: Adapter | str,
+        adapter_types: tuple[AdapterType, ...],
+        adapter_kwargs: dict | None = None,
+    ):
+        """A component that is backed by an Adapter.
+
+        `AdapterBackedComponent`s are special components that explicitly activate a model modality.
+        These model modalities are usually explicit (activating an aLoRA or loading and using an LoRA).
+        However, these model modalities could also be implicit, although that use is discouraged except as a compatibility shim.
+
+        Args:
+            adapter: the adapter that will be activated when this component is the `action` passed into a `Backend` generate call.
+            adapter_types: the types of the adapter. Example: lora, alora, baked_in_mode
+            adapter_kwargs: some adapters require kwargs when utilizing them; provide those here.
+        """
+        self._adapter = adapter
+        self._adapter_types = adapter_types
+        self._adapter_kwargs = adapter_kwargs
+
+    @property
+    def adapter_name(self) -> str:
+        """Resolves and returns the name of the adapter."""
+        match self._adapter:
+            case str():
+                return self._adapter
+            case Adapter():
+                return self._adapter.name
+            case _:
+                raise TypeError(
+                    f"Expected Adapter | str but found {self._adapter} : {type(self._adapter)}"
+                )
+
+    @property
+    def adapter_types(self) -> tuple[AdapterType, ...]:
+        """Tuple of available adapter types that implement this intrinsic."""
+        return self._adapter_types
 
 
 class Intrinsic(Component[str]):

@@ -4,6 +4,7 @@ import json
 from collections.abc import Callable
 from typing import Any, overload
 
+from ...backends.adapters.adapter import Adapter
 from ...core import CBlock, Context, FancyLogger, Requirement, ValidationResult
 from ..components.intrinsic import Intrinsic
 
@@ -55,7 +56,8 @@ class ALoraRequirement(Requirement, Intrinsic):
         if intrinsic_name is None:
             intrinsic_name = "requirement_check"
 
-        # Initialize the other side of the inheritance tree
+        # We have not initialized this object as a Requirement, but this is also an Intrinsic.
+        # So we need to run the Intrinsic initializer  on `self` as well.
         Intrinsic.__init__(
             self,
             intrinsic_name=intrinsic_name,
