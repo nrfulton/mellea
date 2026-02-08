@@ -43,7 +43,7 @@ from ..core import (
 from ..core.base import AbstractMelleaTool
 from ..formatters import ChatFormatter, TemplateFormatter
 from ..helpers import message_to_openai_message, messages_to_docs, send_to_queue
-from ..stdlib.components import Intrinsic, Message
+from ..stdlib.components import Intrinsic, Message, AdapterBackedComponent
 from ..stdlib.requirements import ALoraRequirement, LLMaJRequirement
 from ..telemetry.backend_instrumentation import (
     instrument_generate_from_raw,
@@ -223,7 +223,7 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
 
             if isinstance(action, ALoraRequirement):
                 reroute_to_alora = True
-                adapter_name = action.intrinsic_name
+                adapter_name = action.adapter.name
                 alora_action = action
             else:
                 assert action.description is not None, (
@@ -301,6 +301,12 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
             out = generate_func(*args, **kwargs)
             _assert_correct_adapters(adapter_name, self._model)
             return out
+
+
+    async def _generate_using_adapter(
+        self, action: AdapterBackedComponent, ctx: Context, *, model_options: dict[str, Any]
+    ):
+        
 
     async def _generate_from_intrinsic(
         self, action: Intrinsic, ctx: Context, *, model_options: dict[str, Any]

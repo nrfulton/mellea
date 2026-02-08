@@ -13,12 +13,13 @@ from ...core import (
 from .chat import Message, ToolMessage, as_chat_history
 from .docs.document import Document
 from .instruction import Instruction
-from .intrinsic import Intrinsic
+from .intrinsic import AdapterBackedComponent, Intrinsic
 from .mify import mify
 from .mobject import MObject, MObjectProtocol, Query, Transform
 from .simple import SimpleComponent
 
 __all__ = [
+    "AdapterBackedComponent",
     "CBlock",
     "Component",
     "ComponentParseError",

@@ -352,9 +352,10 @@ class OpenAIBackend(FormatterBackend, AdapterMixin):
             reroute_to_alora = self.default_to_constraint_checking_alora
             adapter_name = "requirement_check"
 
+            # If the Requirement is an ALoraRequirement, then use is adapter instead.
             if isinstance(action, ALoraRequirement):
                 reroute_to_alora = True
-                adapter_name = action.intrinsic_name
+                adapter_name = action.adapter().name
                 alora_action = action
             else:
                 assert action.description is not None, (

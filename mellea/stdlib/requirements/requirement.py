@@ -6,7 +6,7 @@ from typing import Any, overload
 
 from ...backends.adapters.adapter import Adapter
 from ...core import CBlock, Context, FancyLogger, Requirement, ValidationResult
-from ..components.intrinsic import Intrinsic
+from ..components.intrinsic import AdapterBackedComponent
 
 
 class LLMaJRequirement(Requirement):
@@ -37,32 +37,34 @@ def requirement_check_to_bool(x: CBlock | str) -> bool:
     return False
 
 
-class ALoraRequirement(Requirement, Intrinsic):
+class ALoraRequirement(Requirement, AdapterBackedComponent):
     """A requirement that always uses an (possibly specified) ALora. If an exception is thrown during the ALora execution path, `mellea` will fall back to LLMaJ. But that is the only case where LLMaJ will be used."""
 
-    def __init__(self, description: str, intrinsic_name: str | None = None):
+    def __init__(self, description: str, adapter: Adapter | str | None = None):
         """A requirement that is validated by an ALora.
 
         Args:
             description: See `Requirement.__init__`
-            intrinsic_name: the name of the intrinsic; must match the adapter
+            adapter: either an adapter or a name of an intrinsic. If None, the "requirement_check" intrinsic will be used by default.
         """
         # TODO: We may want to actually do the validation_fn here so that we can set the score.
         super().__init__(
             description, validation_fn=None, output_to_bool=requirement_check_to_bool
         )
         self.use_aloras: bool = True
+        self._adapter = "requirement_check" if adapter is None else adapter
 
-        if intrinsic_name is None:
-            intrinsic_name = "requirement_check"
-
-        # We have not initialized this object as a Requirement, but this is also an Intrinsic.
-        # So we need to run the Intrinsic initializer  on `self` as well.
-        Intrinsic.__init__(
-            self,
-            intrinsic_name=intrinsic_name,
-            intrinsic_kwargs={"requirement": f"{self.description}"},
-        )
+    def adapter(self):
+        """Returns the adapter associated with this requirement."""
+        match self._adapter:
+            case Adapter():
+                return self._adapter
+            case str():
+                # TODO-nrf: resolve the adapter in the intrinsics dict or whatever?
+                # TODO-nrf resolve before merging.
+                raise Exception(
+                    "TODO-nrf: resolve the adapter in the intrinsics dict or whatever???"
+                )
 
 
 def reqify(r: str | Requirement) -> Requirement:
