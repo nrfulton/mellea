@@ -270,10 +270,11 @@ class LocalHFBackend(FormatterBackend, AdapterMixin):
                     if torch.backends.mps.is_available()
                     else "cpu"
                 )
+                print(f"Using {self._device}")
                 # Get the model and tokenizer.
                 self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
-                    self._hf_model_id
-                ).to(self._device)  # type: ignore
+                    self._hf_model_id, device_map="auto"
+                )  # type: ignore
                 self._tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
                     self._hf_model_id
                 )
