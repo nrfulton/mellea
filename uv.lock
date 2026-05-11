@@ -3363,6 +3363,7 @@ all = [
     { name = "elasticsearch" },
     { name = "fastapi" },
     { name = "grpcio" },
+    { name = "httpx" },
     { name = "huggingface-hub" },
     { name = "ibm-watsonx-ai" },
     { name = "langchain-core" },
@@ -3370,6 +3371,7 @@ all = [
     { name = "litellm", version = "1.83.14", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and python_full_version < '3.14'" },
     { name = "llguidance" },
     { name = "llm-sandbox", extra = ["docker"] },
+    { name = "mcp" },
     { name = "omegaconf" },
     { name = "opencv-python-headless" },
     { name = "opentelemetry-api" },
@@ -3454,7 +3456,9 @@ telemetry = [
     { name = "opentelemetry-sdk" },
 ]
 tools = [
+    { name = "httpx" },
     { name = "langchain-core" },
+    { name = "mcp" },
     { name = "smolagents" },
 ]
 watsonx = [
@@ -3540,6 +3544,7 @@ requires-dist = [
     { name = "elasticsearch", marker = "extra == 'granite-retriever'", specifier = ">=8.0.0,<9.0.0" },
     { name = "fastapi", marker = "extra == 'server'" },
     { name = "grpcio", marker = "extra == 'hooks'", specifier = ">=1.78.0" },
+    { name = "httpx", marker = "extra == 'tools'", specifier = ">=0.27" },
     { name = "huggingface-hub", marker = "extra == 'hf'", specifier = ">=0.33.4" },
     { name = "huggingface-hub", marker = "extra == 'switch'", specifier = ">=0.33.4" },
     { name = "ibm-watsonx-ai", marker = "extra == 'watsonx'", specifier = ">=1.3.31" },
@@ -3549,6 +3554,7 @@ requires-dist = [
     { name = "llguidance", marker = "extra == 'hf'" },
     { name = "llm-sandbox", extras = ["docker"], marker = "extra == 'sandbox'", specifier = ">=0.3.23" },
     { name = "math-verify" },
+    { name = "mcp", marker = "extra == 'tools'", specifier = ">=1.27.0" },
     { name = "mellea", extras = ["backends", "docling", "tools", "telemetry", "server", "sandbox", "switch", "granite-retriever", "hooks", "cli"], marker = "extra == 'all'", editable = "." },
     { name = "mellea", extras = ["cli"], marker = "extra == 'server'", editable = "." },
     { name = "mellea", extras = ["hooks"], marker = "extra == 'telemetry'", editable = "." },
