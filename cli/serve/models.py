@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, RootModel, model_validator
 
 from mellea.helpers.openai_compatible_helpers import CompletionUsage
 
@@ -13,9 +13,28 @@ class ChatMessage(BaseModel):
     function_call: dict[str, Any] | None = None  # For function/tool messages
 
 
-class FunctionParameters(BaseModel):
-    # Accept any structure for function parameters
-    RootModel: dict[str, Any]
+class FunctionParameters(RootModel[dict[str, Any]]):
+    """OpenAI-compatible function parameters as a bare JSON Schema object.
+
+    Accepts a standard JSON Schema dict directly without wrapping.
+    Example: {"type": "object", "properties": {...}, "required": [...]}
+    """
+
+    root: dict[str, Any]
+
+    @model_validator(mode="after")
+    def _reject_legacy_envelope(self) -> "FunctionParameters":
+        """Reject legacy RootModel envelope pattern.
+
+        Ensures parameters are sent as a bare JSON Schema object, not wrapped
+        in a {"RootModel": {...}} envelope which would be invalid.
+        """
+        if set(self.root.keys()) == {"RootModel"}:
+            raise ValueError(
+                "Legacy {'RootModel': {...}} envelope is no longer accepted. "
+                "Send parameters as a bare JSON Schema object."
+            )
+        return self
 
 
 class FunctionDefinition(BaseModel):
@@ -29,8 +48,33 @@ class ToolFunction(BaseModel):
     function: FunctionDefinition
 
 
+class JsonSchemaFormat(BaseModel):
+    """JSON Schema definition for structured output."""
+
+    name: str
+    """Name of the schema."""
+
+    schema_: dict[str, Any] = Field(alias="schema")
+    """JSON Schema definition."""
+
+    strict: bool | None = None
+    """Accepted for OpenAI compatibility; currently ignored by ``m serve``."""
+
+    model_config = {"populate_by_name": True, "serialize_by_alias": True}
+
+
 class ResponseFormat(BaseModel):
-    type: Literal["text", "json_object"]
+    type: Literal["text", "json_object", "json_schema"]
+
+    json_schema: JsonSchemaFormat | None = None
+    """JSON Schema definition when type is 'json_schema'."""
+
+    @model_validator(mode="after")
+    def validate_json_schema_required(self) -> "ResponseFormat":
+        """Validate that json_schema is provided when type is 'json_schema'."""
+        if self.type == "json_schema" and self.json_schema is None:
+            raise ValueError("json_schema field is required when type is 'json_schema'")
+        return self
 
 
 class StreamOptions(BaseModel):
@@ -46,10 +90,6 @@ class StreamOptions(BaseModel):
     When False (default), usage is excluded from streaming responses.
     For non-streaming requests, usage is always included regardless of this setting.
     """
-
-
-class LogitBias(BaseModel):
-    RootModel: dict[str, float]
 
 
 class ChatCompletionRequest(BaseModel):
