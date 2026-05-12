@@ -1,4 +1,5 @@
 ---
+canonical: "https://docs.mellea.ai/examples/index"
 title: "Examples"
 description: "Complete working programs demonstrating Mellea patterns in production-like scenarios."
 # diataxis: reference
@@ -28,7 +29,7 @@ to run.
 | Category | What it shows |
 | -------- | ------------- |
 | `instruct_validate_repair/` | The IVR loop end-to-end: basic generation, adding requirements, automatic repair on failure, custom validators |
-| `generative_slots/` | `@generative` functions with typed returns, pipeline composition, `ChatContext` persona injection, pre/postcondition checks |
+| `generative_stubs/` | `@generative` functions with typed returns, pipeline composition, `ChatContext` persona injection, pre/postcondition checks |
 | `context/` | Context inspection, sampling with context trees, parallel context branches |
 | `sessions/` | Custom session types and backend selection |
 | `async/` | How to utilize basic async capabilities |
@@ -78,6 +79,7 @@ to run.
 | -------- | ------------- |
 | `aLora/` | Training aLoRA adapters for fast constraint checking; performance optimisation |
 | `intrinsics/` | Answer relevance, hallucination detection, citation validation, context relevance — specialised adapter-backed checks |
+| `granite-switch/` | Running intrinsics via OpenAI backend with Granite Switch embedded adapters |
 | `sofai/` | Two-tier sampling: fast-model iteration with escalation to a slow model; cost optimisation |
 
 ### Multimodal
@@ -103,7 +105,7 @@ to run.
 | Category | What it shows |
 | -------- | ------------- |
 | `hello_world.py` | Minimal single-file starting point |
-| `tutorial/` | Python script versions of the tutorials: email generation, IVR, generative slots, contexts, MObjects, model options, and more |
+| `tutorial/` | Python script versions of the tutorials: email generation, IVR, generative stubs, contexts, MObjects, model options, and more |
 | `notebooks/` | Jupyter notebook versions of the same tutorials for interactive, cell-by-cell exploration |
 
 ---
@@ -127,4 +129,4 @@ uv run docs/examples/<folder>/<file>.py
 
 **Default backend:** `start_session()` with no arguments connects to a local
 [Ollama](https://ollama.ai) instance running **IBM Granite 4 Micro**
-(`granite4:micro`). Make sure Ollama is running before you execute any example.
+(`granite4.1:3b`). Make sure Ollama is running before you execute any example.

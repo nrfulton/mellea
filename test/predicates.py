@@ -94,6 +94,9 @@ def require_gpu(*, min_vram_gb: int | None = None):
     Args:
         min_vram_gb: Minimum VRAM in GB.  When ``None``, any GPU suffices.
     """
+    if os.environ.get("_MELLEA_SKIP_RESOURCE_CHECKS"):
+        return pytest.mark.skipif(False, reason="")
+
     if not _gpu_available():
         return pytest.mark.skipif(True, reason="No GPU available (CUDA/MPS)")
 
@@ -124,6 +127,9 @@ def _system_ram_gb() -> float:
 
 def require_ram(min_gb: int):
     """Skip unless the system has at least *min_gb* GB of RAM."""
+    if os.environ.get("_MELLEA_SKIP_RESOURCE_CHECKS"):
+        return pytest.mark.skipif(False, reason="")
+
     ram = _system_ram_gb()
     if ram > 0 and ram < min_gb:
         return pytest.mark.skipif(
@@ -154,6 +160,52 @@ def require_api_key(*env_vars: str):
             True, reason=f"Missing environment variables: {', '.join(missing)}"
         )
     return pytest.mark.skipif(False, reason="")
+
+
+# ---------------------------------------------------------------------------
+# NLTK data
+# ---------------------------------------------------------------------------
+
+
+def _nltk_data_available() -> tuple[bool, str]:
+    """Check whether nltk is installed *and* punkt_tab data is downloaded.
+
+    Returns a (available, reason) tuple so the skip message is specific:
+    - nltk not installed  → "nltk not installed — install mellea[formatters]"
+    - punkt_tab missing   → "NLTK punkt_tab data not downloaded — run: python -m nltk.downloader punkt_tab"
+    - both ok             → (True, "")
+    """
+    try:
+        import nltk
+    except ImportError:
+        return False, "nltk not installed — install mellea[formatters]"
+
+    try:
+        import nltk.data
+
+        nltk.data.find("tokenizers/punkt_tab")
+    except LookupError:
+        return (
+            False,
+            "NLTK punkt_tab data not downloaded — run: python -m nltk.downloader punkt_tab",
+        )
+
+    return True, ""
+
+
+def require_nltk_data():
+    """Skip unless nltk is installed and punkt_tab tokenizer data is available.
+
+    Distinguishes between the two failure modes so the skip reason is actionable::
+
+        @require_nltk_data()
+        def test_citation_spans(): ...
+
+        # Module-level (skips all tests in the file):
+        pytestmark = [require_nltk_data()]
+    """
+    available, reason = _nltk_data_available()
+    return pytest.mark.skipif(not available, reason=reason)
 
 
 # ---------------------------------------------------------------------------

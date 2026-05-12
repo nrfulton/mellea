@@ -51,7 +51,7 @@ Tests use a four-tier granularity system (`unit`, `integration`, `e2e`, `qualita
 
 See **[test/MARKERS_GUIDE.md](test/MARKERS_GUIDE.md)** for the full marker reference (tier definitions, backend markers, resource gates, auto-skip logic, common patterns).
 
-**Examples in `docs/examples/`** use comment-based markers:
+**Examples in `docs/examples/`** are opt-in — unlike `test/` files (auto-collected, default `unit`), examples require an explicit `# pytest:` comment to be collected. Files without this comment are silently ignored (they won't appear in skip summaries either). This is because examples have variable dependencies and limited setup:
 ```python
 # pytest: e2e, ollama, qualitative
 """Example description..."""
@@ -88,17 +88,31 @@ mkdir -p .bob && ln -s ../.agents/skills .bob/skills
 - Use `...` in `@generative` function bodies
 - Prefer primitives over classes
 - **Friendly Dependency Errors**: Wraps optional backend imports in `try/except ImportError` with a helpful message (e.g., "Please pip install mellea[hf]"). See `mellea/stdlib/session.py` for examples.
-- **Backend telemetry fields**: All backends must populate `mot.usage` (dict with `prompt_tokens`, `completion_tokens`, `total_tokens`), `mot.model` (str), and `mot.provider` (str) in their `post_processing()` method. Metrics are automatically recorded by `TokenMetricsPlugin` — don't add manual `record_token_usage_metrics()` calls.
+- **CLI command docstrings**: Typer command functions in `cli/` follow an enriched convention with `Prerequisites:` and `See Also:` sections — these feed the auto-generated CLI reference page. See [`docs/docs/guide/CONTRIBUTING.md`](docs/docs/guide/CONTRIBUTING.md) for the full pattern. Regenerate after changes: `uv run poe clidocs`. Test the generator: `uv run pytest tooling/docs-autogen/test_cli_reference.py -v`. Full pipeline docs: [`tooling/docs-autogen/README.md`](tooling/docs-autogen/README.md).
+- **Backend telemetry fields**: All backends must populate `mot.generation.usage` (dict with `prompt_tokens`, `completion_tokens`, `total_tokens`), `mot.generation.model` (str), and `mot.generation.provider` (str) in their `post_processing()` method. These fields live on `mot.generation`, a `GenerationMetadata` dataclass. `mot.generation.streaming` (bool) and `mot.generation.ttfb_ms` (float | None) are set automatically in `astream()` — backends do not need to set them. Metrics are automatically recorded by `TokenMetricsPlugin`, `LatencyMetricsPlugin`, and `ErrorMetricsPlugin` — don't add manual `record_token_usage_metrics()`, `record_request_duration()`, or `record_error()` calls.
 
 ## 6. Commits & Hooks
 [Angular format](https://github.com/angular/angular/blob/main/CONTRIBUTING.md#commit): `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `release:`
 
 Pre-commit runs: ruff, mypy, uv-lock, codespell
 
-## 7. Timing
+For AI attribution trailers, see [Section 7 (AI Attribution)](#7-ai-attribution).
+
+## 7. AI Attribution
+
+Commits require a Signed-off-by trailer from the human author (added by running `git commit -s`). AI agents must not add a Signed-off-by in the tool's own name — instead, always add an `Assisted-by:` trailer to the commit footer:
+
+```text
+Assisted-by: Claude Code
+Assisted-by: IBM Bob
+```
+
+Use the tool's common name (e.g., GitHub Copilot, Cursor, etc.).
+
+## 8. Timing
 > **Don't cancel**: `pytest` (full) and `pre-commit --all-files` may take minutes. Canceling mid-run can corrupt state.
 
-## 8. Common Issues
+## 9. Common Issues
 | Problem | Fix |
 |---------|-----|
 | `ComponentParseError` | Add examples to docstring |
@@ -106,22 +120,23 @@ Pre-commit runs: ruff, mypy, uv-lock, codespell
 | Ollama refused | Run `ollama serve` |
 | Telemetry import errors | Run `uv sync` to install OpenTelemetry deps |
 
-## 9. Self-Review (before notifying user)
+## 10. Self-Review (before notifying user)
 1. `uv run pytest test/ -m "not qualitative"` passes?
 2. `ruff format` and `ruff check` clean?
 3. New functions typed with concise docstrings?
 4. Unit tests added for new functionality?
 5. Avoided over-engineering?
 
-## 10. Writing Tests
+## 11. Writing Tests
 
 - Place tests in `test/` mirroring source structure
 - Name files `test_*.py` (required for pydocstyle)
 - Use `gh_run` fixture for CI-aware tests (see `test/conftest.py`)
 - Mark tests checking LLM output quality with `@pytest.mark.qualitative`
 - If a test fails, fix the **code**, not the test (unless the test was wrong)
+- **Static type checks** live in `test/typing/` as `check_*.py` files (not `test_*.py`, so pytest skips them). They use `typing.assert_type` inside function bodies to verify overload resolution and generic parameterization — e.g., that `session.aact(..., await_result=True)` narrows to `ComputedModelOutputThunk[str]`. Verification happens via `uv run mypy .`; the functions are never executed. Add a new `check_*.py` here when introducing or modifying `@overload` signatures or generic type parameters on public APIs.
 
-## 11. Writing Docs
+## 12. Writing Docs
 
 If you are modifying or creating pages under `docs/docs/`, follow the writing
 conventions in [`docs/docs/guide/CONTRIBUTING.md`](docs/docs/guide/CONTRIBUTING.md).
@@ -139,10 +154,75 @@ Key rules that differ from typical Markdown habits:
   mellea source; mark forward-looking content with `> **Coming soon:**`
 - **No visible TODOs** — if content is missing, open a GitHub issue instead
 
-## 12. Feedback Loop
+## 13. Feedback Loop
 
 Found a bug, workaround, or pattern? Update the docs:
 
-- **Issue/workaround?** → Add to Section 7 (Common Issues) in this file
+- **Issue/workaround?** → Add to [Section 9 (Common Issues)](#9-common-issues) in this file
 - **Usage pattern?** → Add to [`docs/AGENTS_TEMPLATE.md`](docs/AGENTS_TEMPLATE.md)
 - **New pitfall?** → Add warning near relevant section
+
+## 13. Working with Intrinsics
+
+Intrinsics are specialized LoRA adapters that add task-specific capabilities (RAG evaluation, safety checks, calibration, etc.) to Granite models. Mellea handles adapter loading and input formatting automatically — you just call the right function.
+
+### Using Intrinsics in Mellea
+
+**Prefer the high-level wrappers** in `mellea/stdlib/components/intrinsic/`. These handle adapter loading, context formatting, and output parsing for you:
+
+| Module | Function | Description |
+|--------|----------|-------------|
+| `core` | `check_certainty(context, backend)` | Model certainty about its last response (0–1) |
+| `core` | `requirement_check(context, backend, requirement)` | Whether text meets a requirement (0–1) |
+| `core` | `find_context_attributions(response, documents, context, backend)` | Sentences that influenced the response |
+| `rag` | `check_answerability(question, documents, context, backend)` | Whether documents can answer a question (0–1) |
+| `rag` | `rewrite_question(question, context, backend)` | Rewrite question into a retrieval query |
+| `rag` | `clarify_query(question, documents, context, backend)` | Generate clarification or return "CLEAR" |
+| `rag` | `find_citations(response, documents, context, backend)` | Document sentences supporting the response |
+| `rag` | `check_context_relevance(question, document, context, backend)` | Whether a document is relevant (0–1); only supported for granite-4.0, not granite-4.1 |
+| `rag` | `flag_hallucinated_content(response, documents, context, backend)` | Flag potentially hallucinated sentences |
+
+```python
+from mellea.backends.huggingface import LocalHFBackend
+from mellea.stdlib.components import Message
+from mellea.stdlib.components.intrinsic import core
+from mellea.stdlib.context import ChatContext
+
+backend = LocalHFBackend(model_id="ibm-granite/granite-4.1-3b")
+context = (
+    ChatContext()
+    .add(Message("user", "What is the square root of 4?"))
+    .add(Message("assistant", "The square root of 4 is 2."))
+)
+score = core.check_certainty(context, backend)
+```
+
+For lower-level control (custom adapters, model options), use `mfuncs.act()` with `Intrinsic` directly — see examples in `docs/examples/intrinsics/`.
+
+### Project Resources
+
+- **Canonical catalog**: `mellea/backends/adapters/catalog.py` — source of truth for intrinsic names, HF repo IDs, and adapter types
+- **Usage examples**: `docs/examples/intrinsics/` — working code for every intrinsic
+- **Helper functions**: `mellea/stdlib/components/intrinsic/rag.py` and `core.py`
+
+### Adding New Intrinsics
+
+When adding support for a new intrinsic (not just using an existing one), fetch its README from Hugging Face first. Each README contains the authoritative spec for input/output format, intended use, and examples.
+
+**Writing examples?** The HF READMEs also document intended usage patterns and example inputs — useful reference when writing code in `docs/examples/intrinsics/`.
+
+| Repo | Purpose | Intrinsics |
+|------|---------|------------|
+| [`ibm-granite/granitelib-rag-r1.0`](https://huggingface.co/ibm-granite/granitelib-rag-r1.0) | RAG pipeline | answerability, citations, context_relevance, hallucination_detection, query_rewrite, query_clarification |
+| [`ibm-granite/granitelib-core-r1.0`](https://huggingface.co/ibm-granite/granitelib-core-r1.0) | Core capabilities | context-attribution, requirement-check, uncertainty |
+| [`ibm-granite/granitelib-guardian-r1.0`](https://huggingface.co/ibm-granite/granitelib-guardian-r1.0) | Safety & compliance | guardian-core, policy-guardrails, factuality-detection, factuality-correction |
+
+**README URLs** — RAG intrinsics (no model subfolder):
+```
+https://huggingface.co/ibm-granite/granitelib-rag-r1.0/blob/main/{intrinsic_name}/README.md
+```
+
+Core and Guardian intrinsics (include model subfolder):
+```
+https://huggingface.co/ibm-granite/granitelib-{core,guardian,rag}-r1.0/blob/main/{intrinsic_name}/granite-4.1-{3b,8b,30b}/{lora,alora}/README.md
+```

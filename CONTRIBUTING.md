@@ -283,6 +283,19 @@ Closes #123
 git commit -s -m "feat: your commit message"
 ```
 
+### AI Coding Assistants
+
+AI-assisted development is welcome. You are responsible for reviewing and understanding every change before submitting.
+
+AI coding assistants following project guidelines add an `Assisted-by:` trailer to commit messages by default, identifying which tool was used:
+
+```text
+Assisted-by: Claude Code
+Assisted-by: IBM Bob
+```
+
+Add one line per tool used, using its common name (GitHub Copilot, Cursor, etc.).
+
 ### Pre-commit Hooks
 
 Pre-commit hooks run automatically before each commit and check:
@@ -354,12 +367,43 @@ uv run ruff check .
 ### Required Models
 
 #### Ollama
-- `granite4:micro-h`
-- `granite3.2-vision`
-- `granite4:micro`
-- `qwen2.5vl:7b`
 
-_Note: ollama models can be obtained by running `ollama pull <model>`_
+HuggingFace and cloud backends download or host models automatically. Ollama
+models must be pulled locally before running the tests that need them.
+
+**CI (unit + integration tests):**
+
+- `granite4.1:3b` — default model for `start_session()` and most examples
+
+**Examples (`docs/examples/`):**
+
+- `deepseek-r1:8b` — safety / guardian examples
+- `granite3-guardian:2b` — mini-researcher guardian backend
+- `granite3.2-vision` — vision (Ollama chat) example
+- `granite3.3:8b` — m\_decompose example
+- `granite4:latest` — melp examples
+- `llama3.2` — repair-with-guardian example
+- `llama3.2:3b` — tutorial / mify examples (via `META_LLAMA_3_2_3B`)
+- `qwen2.5vl:7b` — vision (OpenAI-via-Ollama) example
+
+**Additional test models (`test/`):**
+
+- `granite4:small-h` — hybrid-small tests
+- `llama3.2:1b` — lightweight inference tests
+- `llama3:8b` — legacy Llama 3 tests
+- `llava` — multimodal tests
+- `mistral:7b` — Mistral backend tests
+- `smollm2:1.7b` — SmolLM tests
+
+Pull everything:
+
+```bash
+for m in granite4.1:3b deepseek-r1:8b \
+  granite3-guardian:2b granite3.2-vision granite3.3:8b granite4:latest \
+  llama3.2 llama3.2:3b \
+  qwen2.5vl:7b granite4:small-h llama3.2:1b llama3:8b llava mistral:7b \
+  smollm2:1.7b; do ollama pull "$m"; done
+```
 
 ### Test Markers
 
@@ -407,8 +451,8 @@ CICD=1 uv run pytest
 
 ```python
 # Enable debug logging
-from mellea.core import FancyLogger
-FancyLogger.get_logger().setLevel("DEBUG")
+from mellea.core import MelleaLogger
+MelleaLogger.get_logger().setLevel("DEBUG")
 
 # See exact prompt sent to LLM
 print(m.last_prompt())

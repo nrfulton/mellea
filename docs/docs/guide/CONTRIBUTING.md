@@ -74,7 +74,7 @@ before the first H2, so readers can orient themselves quickly:
 - On the **explanation** page:
 
   ```markdown
-  > **Looking to use this in code?** See [Generative Functions](../guide/generative-functions) for practical examples and API details.
+  > **Looking to use this in code?** See [Generative Functions](../how-to/generative-functions) for practical examples and API details.
   ```
 
 - On the **how-to** page:
@@ -140,7 +140,7 @@ Or a section-level callout if multiple blocks share the caveat:
 All code — fenced blocks AND inline backtick references — must match current source:
 
 - Import paths, class names, method names exact.
-- Model IDs current (e.g., `ibm-granite/granite-4.0-micro`).
+- Model IDs current (e.g., `ibm-granite/granite-4.1-3b`).
 - Inline prose fragments consistent with adjacent code blocks.
 
 If the source itself has inconsistencies, document as-is and note in the glossary.
@@ -186,7 +186,7 @@ Verify before merge: relative links resolve, absolute URLs return HTTP 200.
 
 `glossary.md` defines all Mellea-specific terms. Use canonical terms from the glossary; never invent synonyms. Add new terms to `glossary.md` as you write each page.
 
-**Linking rule:** Cross-link to the glossary on **first use only** of a term on each page — not every occurrence. Use anchor links, e.g. `[`MelleaSession`](../guide/glossary#melleasession)`.
+**Linking rule:** Cross-link to the glossary on **first use only** of a term on each page — not every occurrence. Use anchor links, e.g. `[`MelleaSession`](../reference/glossary#melleasession)`.
 
 Terms that **must** be linked on first use wherever they appear in guide pages (getting-started, tutorials, concepts, how-to, integrations, advanced):
 
@@ -408,6 +408,75 @@ in the table below, follow the fix instructions, and re-push.
 | ---------- | ------------- | ---------- |
 | `typeddict_phantom` | `Attributes:` section documents field names not declared in the `TypedDict` | Remove the extra entries — every `Attributes:` entry must match a declared field |
 | `typeddict_undocumented` | `TypedDict` has declared fields that are absent from the `Attributes:` section | Add the missing fields — every declared field must appear in `Attributes:` |
+
+---
+
+## CLI command docstrings
+
+Typer command functions in `cli/` feed the auto-generated **CLI Reference** page
+(`docs/docs/reference/cli.md`). The generator script
+(`tooling/docs-autogen/generate_cli_reference.py`) extracts content from both
+Typer metadata (`help=` strings on `typer.Option`/`typer.Argument`) and the
+command function's docstring.
+
+Follow this convention for CLI command functions:
+
+```python
+def my_command(
+    path: str = typer.Argument(..., help="File or directory to process"),
+    verbose: bool = typer.Option(False, help="Enable verbose output"),
+):
+    """One-line summary of what the command does.
+
+    Extended description with more detail about the command's behaviour.
+
+    Prerequisites:
+        Mellea installed (``uv add mellea``). Any other requirements
+        (running services, authentication, etc.).
+
+    Output:
+        Describe what the command produces — files written, services started,
+        or side effects applied.
+
+    Examples:
+        m my-command path/to/input --flag value
+
+    See Also:
+        guide: how-to/some-guide-page
+        guide: advanced/another-page
+    """
+```
+
+**Rules:**
+
+- **First line** — imperative summary; becomes the command description in the reference.
+- **Body** — expanded description; rendered as a paragraph below the summary.
+- **`Prerequisites:`** — what must be installed or running. Rendered as a callout.
+- **`Output:`** — what the command produces (files, services, side effects). Rendered
+  as an "Output" paragraph.
+- **`Examples:`** — a minimal one-liner invocation showing the most common flags.
+  Rendered as a fenced code block.
+- **`See Also:`** — cross-links to guide pages. Each line is `guide: <relative-doc-path>`
+  (no `.md` extension). Rendered as "See also" links.
+- **`help=` strings** on `typer.Option()` / `typer.Argument()` become the flag
+  descriptions in the options table. Every option **must** have a `help=` string.
+- Regenerate after changes: `uv run poe clidocs`
+
+### CI enforcement
+
+The build pipeline runs `generate_cli_reference.py --strict` which fails if any
+command is missing a summary, `Prerequisites:`, `Output:` section, or has options
+without `help=` text. The `docs-publish` workflow also runs the docs-autogen unit
+tests which verify that all expected commands appear in the generated output.
+
+### Cross-linking convention
+
+Guide pages that document CLI commands should include a link to the CLI Reference
+in their **See also** footer:
+
+```markdown
+**See also:** [Other Page](../path/to-page) | [CLI Reference](../reference/cli)
+```
 
 ---
 

@@ -16,9 +16,9 @@ from ..core import (
     CBlock,
     Component,
     Context,
-    FancyLogger,
     GenerateLog,
     GenerateType,
+    MelleaLogger,
     ModelOutputThunk,
     ModelToolCall,
 )
@@ -30,7 +30,9 @@ from ..stdlib.requirements import ALoraRequirement
 from ..telemetry.backend_instrumentation import (
     instrument_generate_from_context,
     instrument_generate_from_raw,
+    start_generate_span,
 )
+from ..telemetry.context import generate_request_id, with_context
 from .backend import FormatterBackend
 from .model_options import ModelOption
 from .tools import add_tools_from_context_actions, add_tools_from_model_options
@@ -60,7 +62,7 @@ class OllamaModelBackend(FormatterBackend):
 
     def __init__(
         self,
-        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_MICRO_3B,
+        model_id: str | ModelIdentifier = model_ids.IBM_GRANITE_4_1_3B,
         formatter: ChatFormatter | None = None,
         base_url: str | None = None,
         model_options: dict | None = None,
@@ -89,11 +91,11 @@ class OllamaModelBackend(FormatterBackend):
 
         if not self._check_ollama_server():
             err = f"could not create OllamaModelBackend: ollama server not running at {base_url}"
-            FancyLogger.get_logger().error(err)
+            MelleaLogger.get_logger().error(err)
             raise Exception(err)
         if not self._pull_ollama_model():
             err = f"could not create OllamaModelBackend: {self._get_ollama_model_id()} could not be pulled from ollama library"
-            FancyLogger.get_logger().error(err)
+            MelleaLogger.get_logger().error(err)
             raise Exception(err)
 
         # A mapping of common options for this backend mapped to their Mellea ModelOptions equivalent.
@@ -168,7 +170,7 @@ class OllamaModelBackend(FormatterBackend):
             return True
 
         try:
-            FancyLogger.get_logger().debug(
+            MelleaLogger.get_logger().debug(
                 f"Loading/Pulling model from Ollama: {self._get_ollama_model_id()}"
             )
             stream = self._client.pull(self._get_ollama_model_id(), stream=True)
@@ -286,21 +288,22 @@ class OllamaModelBackend(FormatterBackend):
             tuple[ModelOutputThunk[C], Context]: A thunk holding the (lazy) model output
                 and an updated context that includes ``action`` and the new output.
         """
-        from ..telemetry.backend_instrumentation import start_generate_span
-
         # Start span without auto-closing (will be closed in post_processing)
         span = start_generate_span(self, action, ctx, format, tool_calls)
 
         assert ctx.is_chat_context, (
             "The ollama backend only supports chat-like contexts."
         )
-        mot = await self.generate_from_chat_context(
-            action,
-            ctx,
-            _format=format,
-            model_options=model_options,
-            tool_calls=tool_calls,
-        )
+
+        _model_id_str = str(getattr(self, "model_id", "unknown"))
+        with with_context(request_id=generate_request_id(), model_id=_model_id_str):
+            mot = await self.generate_from_chat_context(
+                action,
+                ctx,
+                _format=format,
+                model_options=model_options,
+                tool_calls=tool_calls,
+            )
 
         # Store span for telemetry recording and closing in post_processing
         if span is not None:
@@ -365,9 +368,11 @@ class OllamaModelBackend(FormatterBackend):
         if system_prompt != "":
             conversation.append({"role": "system", "content": system_prompt})
 
+        # NOTE: `self.formatter.to_chat_messages` explicitly skips `Message` objects. However, we need
+        # to print `Message`s to correctly serialize any documents with the message. Do the printing here.
         conversation.extend(
             [
-                {"role": m.role, "content": m.content, "images": m.images}
+                {"role": m.role, "content": self.formatter.print(m), "images": m.images}
                 for m in messages
             ]
         )
@@ -376,7 +381,7 @@ class OllamaModelBackend(FormatterBackend):
         tools: dict[str, AbstractMelleaTool] = dict()
         if tool_calls:
             if _format:
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"Tool calling typically uses constrained generation, but you have specified a `format` in your generate call. NB: tool calling is superseded by format; we will NOT call tools for your request: {action}"
                 )
             else:
@@ -386,7 +391,7 @@ class OllamaModelBackend(FormatterBackend):
                 # Add the tools from the action for this generation last so that
                 # they overwrite conflicting names.
                 add_tools_from_context_actions(tools, [action])
-            FancyLogger.get_logger().info(f"Tools for call: {tools.keys()}")
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         # Generate a chat response from ollama, using the chat messages. Can be either type since stream is passed as a model option.
         chat_response: Coroutine[
@@ -416,6 +421,10 @@ class OllamaModelBackend(FormatterBackend):
             tools=tools,
             _format=_format,
         )
+
+        # Set model/provider early so they are available in the error path
+        output.generation.model = self._get_ollama_model_id()
+        output.generation.provider = "ollama"
 
         try:
             # To support lazy computation, will need to remove this create_task and store just the unexecuted coroutine.
@@ -483,11 +492,11 @@ class OllamaModelBackend(FormatterBackend):
             list[ModelOutputThunk]: A list of model output thunks, one per action.
         """
         if len(actions) > 1:
-            FancyLogger.get_logger().info(
+            MelleaLogger.get_logger().info(
                 "Ollama doesn't support batching; will attempt to process concurrently."
             )
         if tool_calls:
-            FancyLogger.get_logger().warning(
+            MelleaLogger.get_logger().warning(
                 "The completion endpoint does not support tool calling at the moment."
             )
 
@@ -523,7 +532,7 @@ class OllamaModelBackend(FormatterBackend):
             result = None
             error = None
             if isinstance(response, BaseException):
-                FancyLogger.get_logger().warning(
+                MelleaLogger.get_logger().warning(
                     f"generate_from_raw: request {i} failed with "
                     f"{type(response).__name__}: {response}"
                 )
@@ -583,7 +592,7 @@ class OllamaModelBackend(FormatterBackend):
             for tool in chat_response.message.tool_calls:
                 func = tools.get(tool.function.name)
                 if func is None:
-                    FancyLogger.get_logger().warning(
+                    MelleaLogger.get_logger().warning(
                         f"model attempted to call a non-existing function: {tool.function.name}"
                     )
                     continue  # skip this function if we can't find it.
@@ -698,19 +707,15 @@ class OllamaModelBackend(FormatterBackend):
 
         # Populate standardized usage field (convert to OpenAI format)
         if prompt_tokens is not None and completion_tokens is not None:
-            mot.usage = {
+            mot.generation.usage = {
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "total_tokens": prompt_tokens + completion_tokens,
             }
 
         # Populate model and provider metadata
-        mot.model = (
-            self.model_id.ollama_name
-            if isinstance(self.model_id, ModelIdentifier)
-            else str(self.model_id)
-        )
-        mot.provider = "ollama"
+        mot.generation.model = str(self._get_ollama_model_id())
+        mot.generation.provider = "ollama"
 
         # Record telemetry and close span now that response is available
         span = mot._meta.get("_telemetry_span")
@@ -722,8 +727,8 @@ class OllamaModelBackend(FormatterBackend):
             )
 
             if response:
-                if mot.usage:
-                    record_token_usage(span, mot.usage)
+                if mot.generation.usage:
+                    record_token_usage(span, mot.generation.usage)
                 record_response_metadata(span, response)
 
             # Close the span now that telemetry is recorded

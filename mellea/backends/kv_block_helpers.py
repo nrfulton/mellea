@@ -8,12 +8,22 @@ cached prefix computations across multiple generation calls.
 """
 
 from collections.abc import Iterable
-from typing import cast
+from typing import Any, cast
 
-import torch
-from transformers import PreTrainedModel, PreTrainedTokenizerBase
-from transformers.cache_utils import CacheLayerMixin, DynamicCache
-from transformers.generation.utils import GenerateDecoderOnlyOutput
+try:
+    import torch
+    from transformers import PreTrainedModel, PreTrainedTokenizerBase
+    from transformers.cache_utils import CacheLayerMixin, DynamicCache
+    from transformers.generation.utils import GenerateDecoderOnlyOutput
+    from transformers.tokenization_utils_base import BatchEncoding
+except ImportError as e:
+    raise ImportError(
+        "The HuggingFace backend requires extra dependencies. "
+        'Please install them with: pip install "mellea[hf]"'
+    ) from e
+
+TokenizedCacheIterleaving = Iterable[BatchEncoding | DynamicCache]
+LegacyCache = Any
 
 
 @torch.no_grad()

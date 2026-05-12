@@ -19,10 +19,31 @@ uv run pytest -m slow
 
 - `CICD=1` - Enable CI mode (skips qualitative tests)
 - `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` - Helps with GPU memory fragmentation
-- `OLLAMA_KEEP_ALIVE=1m` - Reduce Ollama model idle window from the default 5 minutes to 1 minute.
-  Useful when running without `--group-by-backend`: limits how long a loaded Ollama model occupies
-  unified memory while HF/torch tests are running. Has no effect mid-run (timer resets per request),
-  but reduces the overlap window when switching between backend groups.
+
+## Ollama Model Eviction
+
+When pytest orchestrates many Ollama-backed tests in sequence, the default 5-minute
+keep-alive means models from earlier tests stay resident and accumulate, eventually
+starving later tests of memory.
+
+Two mechanisms in `test/conftest.py` handle this:
+
+- **Per-module eviction** (`pytest_runtest_teardown`) — when crossing a file
+  boundary between Ollama-marked tests, queries `/api/ps` for all loaded models
+  and evicts them with `keep_alive=0`. Covers both `test/` and `docs/examples/`.
+  Always active, no flags required.
+- **Group warm-up/eviction** (`pytest_runtest_setup`) — warms up a fixed set of CI
+  models (`keep_alive=-1`) when entering the Ollama backend group and evicts them
+  when leaving. Requires `--group-by-backend`.
+
+**Trade-off:** if two consecutive test files use the same model, it will be unloaded
+and reloaded (~5-15 s overhead). Predictable memory behaviour is more important
+than saving a reload, especially on constrained CI runners. Tests within a single
+file share the loaded model with no overhead.
+
+**Caveat:** eviction targets *all* loaded Ollama models, not just those loaded by
+the test. If you are using Ollama interactively while the suite runs, your model
+will be evicted between test modules.
 
 ## GPU Testing on CUDA Systems
 
@@ -114,6 +135,10 @@ pytestmark = [pytest.mark.e2e, pytest.mark.huggingface, require_gpu(), require_r
 | `require_gpu(min_vram_gb=N)` | GPU with at least N GB VRAM |
 | `require_ram(min_gb=N)` | N GB+ system RAM |
 | `require_api_key("ENV_VAR")` | Specific API credentials |
+
+Pass `--skip-resource-checks` to bypass `require_gpu` and `require_ram` gates — useful for running test logic on under-spec hardware or reproducing failures from higher-spec machines. API credential and Ollama checks are unaffected. On machines with no GPU at all, gated tests will run and may fail naturally.
+
+The env var `_MELLEA_SKIP_RESOURCE_CHECKS=1` has the same effect and can be used in CI environments without modifying the pytest invocation.
 
 > **Deprecated:** The markers `requires_gpu`, `requires_heavy_ram`, `requires_api_key`,
 > and `requires_gpu_isolation` are deprecated. Existing tests using them still work

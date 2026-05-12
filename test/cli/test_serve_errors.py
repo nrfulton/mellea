@@ -17,7 +17,7 @@ def mock_module_success():
     module.__name__ = "test_module"
     output = Mock()
     output.value = "Test response"
-    output.usage = None  # No usage info in this test
+    output.generation.usage = None  # No usage info in this test
     module.serve = Mock(return_value=output)
     return module
 
@@ -128,7 +128,7 @@ def test_generic_error_handling(mock_module_generic_error, sample_request):
     assert "error" in data
     assert data["error"]["type"] == "server_error"
     assert "Internal server error" in data["error"]["message"]
-    assert "Unexpected error" in data["error"]["message"]
+    assert "Unexpected error" not in data["error"]["message"]
 
 
 @pytest.mark.unit

@@ -13,6 +13,8 @@
 #   WITH_VLLM=1 ./run_tests_with_ollama_and_vllm.sh                  # force-enable vLLM
 #   WITH_VLLM=0 ./run_tests_with_ollama_and_vllm.sh                  # force-disable vLLM
 #   SKIP_WARMUP=1 ./run_tests_with_ollama_and_vllm.sh                 # skip ollama model warmup
+#   WITH_EXAMPLES=1 ./run_tests_with_ollama_and_vllm.sh               # include docs/examples/
+#   WITH_TOOLING_TESTS=1 ./run_tests_with_ollama_and_vllm.sh          # include test/tooling/
 #   WITH_VLLM=1 VLLM_MODEL=ibm-granite/granite-3.3-8b-instruct \
 #     ./run_tests_with_ollama_and_vllm.sh --group-by-backend -v -s
 #
@@ -37,10 +39,11 @@ else
     OLLAMA_DIR="$HOME/.ollama"
 fi
 OLLAMA_BIN="${OLLAMA_BIN:-$(command -v ollama 2>/dev/null || echo "$HOME/.local/bin/ollama")}"
-OLLAMA_MODELS=(
-    "granite4:micro"
-    "granite4:micro-h"
+OLLAMA_MODEL_LIST=(
+    "granite4.1:3b"
     "granite3.2-vision"
+    "llama3.2"
+    "qwen2.5vl:7b"
 )
 
 # --- vLLM configuration ---
@@ -55,7 +58,7 @@ if [[ -z "${WITH_VLLM:-}" ]]; then
     fi
 fi
 VLLM_PORT="${VLLM_PORT:-8100}"
-VLLM_MODEL="${VLLM_MODEL:-ibm-granite/granite-4.0-micro}"
+VLLM_MODEL="${VLLM_MODEL:-ibm-granite/granite-4.1-3b}"
 VLLM_GPU_MEM="${VLLM_GPU_MEM:-0.4}"
 VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-4096}"
 VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-256}"
@@ -139,8 +142,8 @@ else
     # --- Start ollama server ---
     log "Starting ollama server on ${OLLAMA_HOST}:${OLLAMA_PORT}..."
     export OLLAMA_HOST="${OLLAMA_HOST}:${OLLAMA_PORT}"
-    export OLLAMA_MODELS_DIR="${OLLAMA_DIR}/models"
-    mkdir -p "$OLLAMA_MODELS_DIR"
+    export OLLAMA_MODELS="${OLLAMA_DIR}/models"
+    mkdir -p "$OLLAMA_MODELS"
 
     # Ensure ollama can find system CUDA libraries
     if [[ -d "/usr/local/cuda" ]]; then
@@ -172,7 +175,7 @@ fi
 
 # --- Pull required models ---
 export OLLAMA_HOST="127.0.0.1:${OLLAMA_PORT}"
-for model in "${OLLAMA_MODELS[@]}"; do
+for model in "${OLLAMA_MODEL_LIST[@]}"; do
     if "$OLLAMA_BIN" list 2>/dev/null | grep -q "^${model}"; then
         log "Model $model already pulled"
     else
@@ -190,7 +193,7 @@ if [[ "${SKIP_WARMUP:-0}" == "1" || "${OLLAMA_SKIP_WARMUP:-0}" == "1" ]]; then
     log "Skipping model warmup"
 else
     log "Warming up models..."
-    for model in "${OLLAMA_MODELS[@]}"; do
+    for model in "${OLLAMA_MODEL_LIST[@]}"; do
         log "  Warming $model ..."
         curl -sf "http://127.0.0.1:${OLLAMA_PORT}/api/generate" \
             -d "{\"model\": \"$model\", \"prompt\": \"hi\", \"stream\": false}" \
@@ -219,7 +222,7 @@ if [[ "$WITH_VLLM" == "1" ]]; then
             log "Reusing existing vLLM venv at $VLLM_VENV (KEEP_VLLM_VENV=1)"
         else
             log "Creating isolated vLLM venv at $VLLM_VENV ..."
-            uv venv "$VLLM_VENV" --python 3.11
+            uv venv "$VLLM_VENV" --python 3.11 --clear
             log "Installing vllm into $VLLM_VENV ..."
             uv pip install --python "$VLLM_VENV/bin/python" vllm \
                 > "$LOGDIR/vllm_install.log" 2>&1 \
@@ -266,6 +269,21 @@ else
     log "vLLM disabled (WITH_VLLM=0). Pass WITH_VLLM=1 to enable, or run on a CUDA host for auto-detection."
 fi
 
+# WITH_EXAMPLES=1 runs pytest on the whole repo (includes docs/examples/)
+if [[ "${WITH_EXAMPLES:-0}" == "1" ]]; then
+    PYTEST_DIR="."
+else
+    PYTEST_DIR="test/"
+    log "Examples disabled (WITH_EXAMPLES=0). Pass WITH_EXAMPLES=1 to include docs/examples/."
+fi
+
+# WITH_TOOLING_TESTS=1 includes test/tooling/ (ignored by default)
+IGNORE_TOOLING=""
+if [[ "${WITH_TOOLING_TESTS:-0}" != "1" ]]; then
+    IGNORE_TOOLING="--ignore=tooling"
+    log "Tooling tests disabled (WITH_TOOLING_TESTS=0). Pass WITH_TOOLING_TESTS=1 to include test/tooling/."
+fi
+
 # --- Run tests ---
 log "Starting pytest..."
 log "Log directory: $LOGDIR"
@@ -278,8 +296,13 @@ if [[ -n "${UV_PYTHON:-}" ]]; then
     UV_PYTHON_ARG="--python $UV_PYTHON"
 fi
 
+# Download NLTK data required by granite formatter tests
+log "Downloading NLTK punkt_tab data..."
 uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
-    pytest test/ ${@---group-by-backend} \
+    python -c "import nltk; nltk.download('punkt_tab', quiet=True)" || true
+
+uv run --quiet --frozen --all-groups --all-extras $UV_PYTHON_ARG \
+    pytest "$PYTEST_DIR" $IGNORE_TOOLING ${@---group-by-backend} \
     2>&1 | tee "$LOGDIR/pytest_full.log"
 
 EXIT_CODE=${PIPESTATUS[0]}

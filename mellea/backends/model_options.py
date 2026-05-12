@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from ..core import FancyLogger
+from ..core import MelleaLogger
 
 
 class ModelOption:
@@ -21,7 +21,8 @@ class ModelOption:
     ```
 
     Attributes:
-        TOOLS (str): Sentinel key for a list or dict of tools to expose for tool calling.
+        TOOLS (str): Sentinel key for a list or dict of ``MelleaTool`` instances to expose for tool calling.
+        TOOL_CHOICE (str): Key for tool choice strategy (passed through to the backend).
         MAX_NEW_TOKENS (str): Sentinel key for the maximum number of new tokens to generate.
         SYSTEM_PROMPT (str): Sentinel key for the system prompt string.
         TEMPERATURE (str): Key for the sampling temperature (passed through to the backend).
@@ -32,7 +33,10 @@ class ModelOption:
     """
 
     TOOLS = "@@@tools@@@"
-    """Must be a list[Callable] or a dict[str, Callable] where str is the name of the function."""
+    """Must be a list[MelleaTool] or a dict[str, MelleaTool]. Use ``MelleaTool.from_callable()`` or the ``@tool`` decorator to wrap plain callables."""
+
+    TOOL_CHOICE = "tool_choice"
+    """Controls which tool the model should use. Can be "none", "auto", or a specific tool name."""
 
     MAX_NEW_TOKENS = "@@@max_new_tokens@@@"
     SYSTEM_PROMPT = "@@@system_prompt@@@"
@@ -91,6 +95,10 @@ class ModelOption:
             # This will usually be a @@@<>@@@ ModelOption.<> key.
             new_key = from_to.get(old_key, None)
             if new_key:
+                # Skip if old_key and new_key are the same (no-op replacement)
+                if old_key == new_key:
+                    continue
+
                 if new_options.get(new_key, None) is not None:
                     # The key already has a value associated with it in the dict. Leave it be.
                     conflict_log.append(
@@ -107,7 +115,7 @@ class ModelOption:
                 "Encountered conflict(s) when replacing keys. Could not replace keys for:\n"
                 + "\n".join(conflict_log)
             )
-            FancyLogger.get_logger().warning(f"{text_line}")
+            MelleaLogger.get_logger().warning(f"{text_line}")
         return new_options
 
     @staticmethod
