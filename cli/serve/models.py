@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, RootModel, model_validator
 
 from mellea.helpers.openai_compatible_helpers import CompletionUsage
 
@@ -13,9 +13,28 @@ class ChatMessage(BaseModel):
     function_call: dict[str, Any] | None = None  # For function/tool messages
 
 
-class FunctionParameters(BaseModel):
-    # Accept any structure for function parameters
-    RootModel: dict[str, Any]
+class FunctionParameters(RootModel[dict[str, Any]]):
+    """OpenAI-compatible function parameters as a bare JSON Schema object.
+
+    Accepts a standard JSON Schema dict directly without wrapping.
+    Example: {"type": "object", "properties": {...}, "required": [...]}
+    """
+
+    root: dict[str, Any]
+
+    @model_validator(mode="after")
+    def _reject_legacy_envelope(self) -> "FunctionParameters":
+        """Reject legacy RootModel envelope pattern.
+
+        Ensures parameters are sent as a bare JSON Schema object, not wrapped
+        in a {"RootModel": {...}} envelope which would be invalid.
+        """
+        if set(self.root.keys()) == {"RootModel"}:
+            raise ValueError(
+                "Legacy {'RootModel': {...}} envelope is no longer accepted. "
+                "Send parameters as a bare JSON Schema object."
+            )
+        return self
 
 
 class FunctionDefinition(BaseModel):
@@ -41,7 +60,7 @@ class JsonSchemaFormat(BaseModel):
     strict: bool | None = None
     """Accepted for OpenAI compatibility; currently ignored by ``m serve``."""
 
-    model_config = {"populate_by_name": True}
+    model_config = {"populate_by_name": True, "serialize_by_alias": True}
 
 
 class ResponseFormat(BaseModel):
@@ -71,10 +90,6 @@ class StreamOptions(BaseModel):
     When False (default), usage is excluded from streaming responses.
     For non-streaming requests, usage is always included regardless of this setting.
     """
-
-
-class LogitBias(BaseModel):
-    RootModel: dict[str, float]
 
 
 class ChatCompletionRequest(BaseModel):
