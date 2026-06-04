@@ -61,7 +61,7 @@ def test_missing_env_var_raises(monkeypatch):
     monkeypatch.delenv("AWS_BEARER_TOKEN_BEDROCK", raising=False)
     monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
     mid = ModelIdentifier(bedrock_name="some.model-id")
-    with pytest.raises(AssertionError, match="AWS_BEARER_TOKEN_BEDROCK"):
+    with pytest.raises(RuntimeError, match="AWS_BEARER_TOKEN_BEDROCK"):
         create_bedrock_openai_backend(mid)
 
 

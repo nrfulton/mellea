@@ -403,10 +403,10 @@ class OllamaModelBackend(FormatterBackend):
                 # Add the tools from the action for this generation last so that
                 # they overwrite conflicting names.
                 add_tools_from_context_actions(tools, [action])
+            MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
         # Extract top-level Ollama params that must not be forwarded into `options`.
         logprobs = model_opts.pop("logprobs", None)
         top_logprobs = model_opts.pop("top_logprobs", None)
-        MelleaLogger.get_logger().info(f"Tools for call: {tools.keys()}")
 
         # Generate a chat response from ollama, using the chat messages. Can be either type since stream is passed as a model option.
         chat_response: Coroutine[

@@ -42,7 +42,7 @@ print(str(result))
 # Output will vary — LLM responses depend on model and temperature.
 ```
 
-`create_bedrock_mantle_backend` returns an [`OpenAIBackend`](../reference/glossary#backend) pointed at the Bedrock
+`create_bedrock_openai_backend` returns an [`OpenAIBackend`](../reference/glossary#backend) pointed at the Bedrock
 Mantle endpoint. Pass it to [`MelleaSession`](../reference/glossary#melleasession) as shown above. It reads `AWS_BEARER_TOKEN_BEDROCK` from the environment and checks
 that the requested model is available in the target region before returning.
 
@@ -76,8 +76,8 @@ from mellea import MelleaSession
 from mellea.backends.bedrock import create_bedrock_litellm_backend
 
 m = MelleaSession(
-    backend=create_bedrock_openai_backend(
-        model_id="anthropic.claude-3-haiku-20240307-v1:0"
+    backend=create_bedrock_litellm_backend(
+        model_id="bedrock/converse/anthropic.claude-3-haiku-20240307-v1:0"
     )
 )
 ```
@@ -127,7 +127,7 @@ available model IDs and credential setup.
 **`AWS_BEARER_TOKEN_BEDROCK` not set:**
 
 ```text
-AssertionError: Using AWS Bedrock requires setting a AWS_BEARER_TOKEN_BEDROCK environment variable.
+RuntimeError: Using AWS Bedrock requires setting a AWS_BEARER_TOKEN_BEDROCK environment variable.
 ```
 
 Export the environment variable before running your script:
@@ -144,7 +144,7 @@ Model X is not supported in region us-east-1.
 
 Either enable model access for the requested model in your AWS account at
 [Bedrock Model Access](https://us-east-1.console.aws.amazon.com/bedrock/home#/model-access),
-or pass a different `region` to `create_bedrock_litellm_backend`.
+or pass a different `region` to `create_bedrock_openai_backend`.
 
 ## Vision support
 

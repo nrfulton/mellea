@@ -252,7 +252,7 @@ OPENAI_GPT_OSS_20B = ModelIdentifier(
     hf_model_name="openai/gpt-oss-20b",  # OpenAI GPT-OSS 20B
     ollama_name="gpt-oss:20b",  # Ollama
     bedrock_name="openai.gpt-oss-20b",
-    bedrock_litellm_name="bedrock/converse/openai.gpt-oss-120b-1:0",
+    bedrock_litellm_name="bedrock/converse/openai.gpt-oss-20b-1:0",
 )
 OPENAI_GPT_OSS_120B = ModelIdentifier(
     hf_model_name="openai/gpt-oss-120b",  # OpenAI GPT-OSS 120B
