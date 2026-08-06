@@ -21,6 +21,7 @@ from cli.alora.commands import alora_app
 from cli.decompose import app as decompose_app
 from cli.eval.commands import eval_app
 from cli.fix import fix_app
+from cli.guardian.commands import guardian
 from cli.serve.commands import serve
 
 cli = typer.Typer(name="m", no_args_is_help=True)
@@ -33,8 +34,9 @@ def callback() -> None:
 
     Provides sub-commands for serving models (`m serve`), training and uploading
     adapters (`m alora`), decomposing tasks into subtasks (`m decompose`),
-    running test-based evaluation pipelines (`m eval`), and applying automated
-    code migrations (`m fix`).
+    running test-based evaluation pipelines (`m eval`), applying automated
+    code migrations (`m fix`), and running a policy-based guardrail proxy
+    (`m guardian`).
 
     Prerequisites:
         Mellea installed (`uv add mellea`).
@@ -49,6 +51,7 @@ def callback() -> None:
 # as if added with @cli.command() (ie `m serve` here). If we don't use this
 # approach, we would have to use `m server <subcommand>` instead.
 cli.command(name="serve")(serve)
+cli.command(name="guardian")(guardian)
 
 # Add new subcommand groups by importing and adding with `cli.add_typer()`
 # as documented: https://typer.tiangolo.com/tutorial/subcommands/add-typer/#put-them-together.

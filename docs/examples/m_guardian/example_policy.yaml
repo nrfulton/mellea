@@ -1,0 +1,59 @@
+# Example Guardian Policy Configuration
+# This file defines the guardrail policies for the m guardian shim.
+
+version: "1.0"
+
+# Default message returned when any policy is violated
+default_decline_message: |
+  I'm sorry, but I can't help with that request as it doesn't align with
+  our usage policies. Please rephrase your question or ask about something else.
+
+# Policy rules use the policy-guardrails adapter to check compliance
+# against free-form policy text. Returns "Yes" (compliant), "No", or "Ambiguous".
+policy_rules:
+  - name: no_illegal_activities
+    policy: |
+      Users should not request assistance with illegal activities including
+      but not limited to: hacking, fraud, theft, drug manufacturing, weapons
+      creation, or any activity that violates local, state, or federal laws.
+    decline_message: |
+      I can't provide assistance with activities that may be illegal.
+      If you have questions about legal alternatives, I'd be happy to help.
+
+  - name: no_personal_attacks
+    policy: |
+      Users should not request content that personally attacks, harasses,
+      or threatens specific individuals. This includes doxxing requests,
+      targeted harassment campaigns, or content designed to defame or
+      humiliate real people.
+    decline_message: |
+      I can't help create content that targets or harasses individuals.
+      Let me know if there's something constructive I can help with instead.
+
+  - name: professional_use_only
+    policy: |
+      This service is intended for professional and educational use only.
+      Requests should be related to legitimate business, research, or
+      learning purposes.
+
+# Guardian criteria use the guardian-core adapter for risk scoring.
+# Score ranges from 0.0 (no risk) to 1.0 (high risk).
+# Requests with scores >= threshold are declined.
+guardian_criteria:
+  - name: harm
+    threshold: 0.7
+    scoring_schema: user_prompt
+    decline_message: |
+      I've detected potentially harmful content in your request.
+      Please rephrase your question in a way that doesn't involve harmful activities.
+
+  - name: jailbreak
+    threshold: 0.8
+    scoring_schema: user_prompt
+    decline_message: |
+      It looks like you might be trying to bypass my safety guidelines.
+      I'm here to help with legitimate questions - what can I assist you with?
+
+  - name: social_bias
+    threshold: 0.7
+    scoring_schema: user_prompt
