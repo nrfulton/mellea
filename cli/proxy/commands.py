@@ -1,12 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Typer command definition for `m proxy`.
-
-Separates the CLI interface (typer annotations) from the server implementation
-(FastAPI, uvicorn) so that `m --help` works without the `server` extra installed.
-The heavy server dependencies are only imported when `m proxy` is actually invoked.
-"""
+"""Typer command definition for `m proxy`."""
 
 import typer
 

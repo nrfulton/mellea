@@ -1,11 +1,7 @@
 # Copyright IBM Corp. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""MProxy interface for request/response rewriting in the proxy server.
-
-This module defines the MProxy protocol that users can implement to customize
-how requests and responses are transformed as they pass through the proxy.
-"""
+"""MProxy interface for request/response rewriting in the proxy server."""
 
 from abc import ABC, abstractmethod
 
