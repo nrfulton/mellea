@@ -79,6 +79,43 @@ class MProxy(ABC):
         """
         return chunk
 
+    def streaming_rewrite(
+        self, chunks: list[ChatCompletionChunk]
+    ) -> list[ChatCompletionChunk] | ChatCompletion:
+        """Transform a complete buffered streaming response.
+
+        This method receives all chunks after the stream completes, allowing
+        for policy enforcement or other transformations that require the full
+        response. The default implementation returns chunks unchanged.
+
+        Override this method when you need to:
+        - Enforce policies that require seeing the complete response
+        - Transform the response based on its full content
+        - Replace a streaming response with a non-streaming one (e.g., refusal)
+
+        Args:
+            chunks: All chunks received from the upstream response.
+
+        Returns:
+            Either a list of (possibly modified) chunks to stream back,
+            or a single ChatCompletion to return as a non-streaming response
+            (useful for policy violations where you want to return a refusal).
+        """
+        return chunks
+
+    @property
+    def requires_streaming_buffer(self) -> bool:
+        """Whether this proxy requires buffering streaming responses.
+
+        When True, the server will buffer all chunks before calling
+        streaming_rewrite(). When False, chunks are streamed through
+        chunk_rewrite() immediately for lower latency.
+
+        Override to return True if your proxy needs to see the complete
+        response before making decisions (e.g., policy enforcement).
+        """
+        return False
+
 
 class PassthroughProxy(MProxy):
     """Default proxy implementation that passes requests/responses unchanged."""

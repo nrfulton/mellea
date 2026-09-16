@@ -275,8 +275,11 @@ class InMemoryRetriever:
         import sentence_transformers
 
         query_embeddings = self._embedding_model.encode(query)
+        # type: ignore
         raw_result = sentence_transformers.util.semantic_search(
-            query_embeddings, self._embeddings, top_k=top_k
+            query_embeddings,  # type: ignore
+            self._embeddings,
+            top_k=top_k,  # type: ignore
         )
 
         # raw_result is a list of lists of {corpus_id, score}

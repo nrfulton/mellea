@@ -81,6 +81,52 @@ async def _stream_response(response: httpx.Response) -> AsyncIterator[bytes]:
             yield f"{line}\n".encode()
 
 
+async def _buffered_stream_response(response: httpx.Response) -> AsyncIterator[bytes]:
+    """Buffer chunks from upstream, apply streaming_rewrite, then stream result.
+
+    This function collects all chunks first, applies the proxy's streaming_rewrite()
+    method to check/transform the complete response, then streams the result.
+    Used when the proxy's requires_streaming_buffer property is True.
+    """
+    import json
+
+    from openai.types.chat import ChatCompletion, ChatCompletionChunk
+
+    chunks: list[ChatCompletionChunk] = []
+
+    # Collect all chunks
+    async for line in response.aiter_lines():
+        if not line:
+            continue
+
+        if line.startswith("data: "):
+            data = line[6:]
+            if data.strip() == "[DONE]":
+                continue
+
+            try:
+                chunk_dict = json.loads(data)
+                chunk = ChatCompletionChunk.model_validate(chunk_dict)
+                chunks.append(chunk)
+            except Exception:
+                pass
+
+    # Apply streaming_rewrite to the complete buffered response
+    result = _mproxy.streaming_rewrite(chunks)
+
+    # Stream the result
+    if isinstance(result, ChatCompletion):
+        # Convert non-streaming response to a single "fake" stream
+        # This happens when policy enforcement returns a refusal
+        yield f"data: {result.model_dump_json()}\n\n".encode()
+    else:
+        # Stream the (possibly modified) chunks
+        for chunk in result:
+            yield f"data: {chunk.model_dump_json()}\n\n".encode()
+
+    yield b"data: [DONE]\n\n"
+
+
 @app.api_route("/v1/chat/completions", methods=["POST"], include_in_schema=True)
 async def proxy_chat_completions(request: Request) -> StreamingResponse | JSONResponse:
     """Proxy chat completion requests to the upstream endpoint.
@@ -127,8 +173,14 @@ async def proxy_chat_completions(request: Request) -> StreamingResponse | JSONRe
                 content=content.decode() if content else {"error": "Upstream error"},
             )
 
+        # Choose streaming strategy based on proxy requirements
+        if _mproxy.requires_streaming_buffer:
+            stream_generator = _buffered_stream_response(upstream_response)
+        else:
+            stream_generator = _stream_response(upstream_response)
+
         return StreamingResponse(
-            _stream_response(upstream_response),
+            stream_generator,
             media_type="text/event-stream",
             headers={
                 k: v
