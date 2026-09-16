@@ -9,7 +9,15 @@ that module holds no model code. Enforcement is covered in `test_mitm.py`.
 
 import pytest
 
-from cli.mitm.policy import Policy, PolicyError, PolicyRegistry, load_policy
+from cli.mitm.policy import (
+    Policy,
+    PolicyEntry,
+    PolicyError,
+    PolicyRegistry,
+    load_policy,
+    policy_from_mapping,
+    policy_to_mapping,
+)
 
 FULL_POLICY = """
 risk_group: alcohol_consumption_prohibited
@@ -332,3 +340,233 @@ def test_add_path_names_the_file_that_failed(tmp_path):
 
     with pytest.raises(PolicyError, match=r"broken\.yaml"):
         registry.add_path(tmp_path)
+
+
+# --------------------------------------------------------------------------------------
+# Reading and writing documents as mappings
+# --------------------------------------------------------------------------------------
+
+
+def test_policy_to_mapping_round_trips():
+    """A policy written out and read back is the same policy.
+
+    Pinned because the control plane hands a document to an editor and registers whatever
+    comes back: anything the pair of them drops would silently stop being enforced.
+    """
+    policy = load_policy(FULL_POLICY)
+
+    assert policy_from_mapping(policy_to_mapping(policy)) == policy
+
+
+def test_policy_to_mapping_writes_every_schema_field():
+    """Absent optionals are written as `None` rather than omitted.
+
+    An editor reading this should see every field the schema defines, instead of having to
+    know which ones can be missing.
+    """
+    mapping = policy_to_mapping(load_policy(FULL_POLICY))
+    academic = mapping["risks"][1]
+
+    assert academic["reason_denial"] is None
+    assert academic["exception"] is None
+    assert academic["short_reply_type"] == "CAUTIOUS_INFORMATIVE"
+    assert academic["policy"]["reply_cannot_contain"] == ["Detailed brewing processes"]
+
+
+def test_policy_from_mapping_reads_an_unparsed_document():
+    """A mapping that never was YAML parses the same way."""
+    policy = policy_from_mapping(
+        {
+            "risk_group": "competitor_statements",
+            # A JSON client sends this as a number, exactly as YAML parses it.
+            "risk_group_id": 14,
+            "risks": [{"risk": "competitor_disparagement"}],
+        }
+    )
+
+    assert policy.risk_group_id == "14"
+    assert policy.risks[0].reply_cannot_contain == ()
+
+
+@pytest.mark.parametrize(
+    "document,match",
+    [
+        (["not", "a", "mapping"], "must be a YAML mapping"),
+        ({"description": "no name"}, "missing a 'risk_group' name"),
+        ({"risk_group": "g", "risks": "not a list"}, "'risks' must be a list"),
+    ],
+    ids=["not-a-mapping", "no-name", "risks-not-a-list"],
+)
+def test_policy_from_mapping_rejects_bad_documents(document, match):
+    """The mapping path enforces the schema, so the API cannot bypass validation."""
+    with pytest.raises(PolicyError, match=match):
+        policy_from_mapping(document)
+
+
+def test_load_policy_delegates_to_policy_from_mapping():
+    """The YAML and mapping paths produce identical results, not merely similar ones."""
+    import yaml
+
+    assert load_policy(FULL_POLICY) == policy_from_mapping(yaml.safe_load(FULL_POLICY))
+
+
+def test_registry_add_mapping_registers_a_policy():
+    """A policy can be registered without ever being serialised to YAML."""
+    registry = PolicyRegistry()
+    policy = registry.add_mapping(policy_to_mapping(load_policy(FULL_POLICY)))
+
+    assert policy.risk_group == "alcohol_consumption_prohibited"
+    assert len(registry.restrictions()) == 3
+
+
+# --------------------------------------------------------------------------------------
+# Enabling and disabling
+# --------------------------------------------------------------------------------------
+
+
+def test_a_new_policy_is_enforced():
+    """Registering a policy enables it, so loading one is enough to enforce it."""
+    registry = PolicyRegistry()
+    registry.add(FULL_POLICY)
+
+    assert registry.entries() == [PolicyEntry(policy=registry.list()[0], enabled=True)]
+
+
+def test_disabled_policy_is_registered_but_not_enforced():
+    """Parking a guard stops enforcement without losing the policy.
+
+    This is the whole point of the flag: `restrictions` is what `policy_guard` screens
+    against, while `list` and `__len__` still report the policy so it can be edited or
+    switched back on.
+    """
+    registry = PolicyRegistry()
+    registry.add(FULL_POLICY)
+
+    assert registry.set_enabled("alcohol_consumption_prohibited", False) is True
+
+    assert registry.restrictions() == []
+    assert len(registry) == 1
+    assert [p.risk_group for p in registry.list()] == ["alcohol_consumption_prohibited"]
+
+
+def test_disabling_one_policy_leaves_the_others_enforced():
+    """The flag is per policy, not a global switch."""
+    registry = PolicyRegistry()
+    registry.add(FULL_POLICY)
+    registry.add(SECOND_POLICY)
+
+    registry.set_enabled("alcohol_consumption_prohibited", False)
+
+    assert [restriction for _, _, restriction in registry.restrictions()] == [
+        "Derogatory language about competitor brands"
+    ]
+
+
+@pytest.mark.parametrize("key", ["alcohol_consumption_prohibited", "11"])
+def test_set_enabled_accepts_either_identifier(key):
+    """A policy can be parked by whichever identifier the caller has, as with `remove`."""
+    registry = PolicyRegistry()
+    registry.add(FULL_POLICY)
+
+    assert registry.set_enabled(key, False) is True
+    assert registry.restrictions() == []
+
+
+def test_set_enabled_reports_a_miss():
+    """Toggling something absent is a `False`, not an error."""
+    registry = PolicyRegistry()
+
+    assert registry.set_enabled("no_such_policy", False) is False
+
+
+def test_re_enabling_restores_enforcement():
+    """The flag goes both ways."""
+    registry = PolicyRegistry()
+    registry.add(FULL_POLICY)
+    registry.set_enabled("11", False)
+
+    registry.set_enabled("11", True)
+
+    assert len(registry.restrictions()) == 3
+
+
+def test_add_preserves_the_flag_when_replacing():
+    """Editing a parked policy must not silently re-arm it.
+
+    A UI that reads a policy, changes a restriction, and writes it back goes through
+    `add`; if that re-enabled the guard, disabling one would not survive an edit.
+    """
+    registry = PolicyRegistry()
+    registry.add(FULL_POLICY)
+    registry.set_enabled("11", False)
+
+    registry.add(FULL_POLICY)
+
+    assert registry.get("11").enabled is False
+    assert registry.restrictions() == []
+
+
+def test_add_can_set_the_flag_outright():
+    """An explicit flag overrides the preserve-on-replace default."""
+    registry = PolicyRegistry()
+    registry.add(FULL_POLICY)
+    registry.set_enabled("11", False)
+
+    registry.add(FULL_POLICY, enabled=True)
+
+    assert len(registry.restrictions()) == 3
+
+
+def test_add_can_register_a_policy_parked():
+    """A policy can be loaded without being enforced yet."""
+    registry = PolicyRegistry()
+    registry.add(FULL_POLICY, enabled=False)
+
+    assert len(registry) == 1
+    assert registry.restrictions() == []
+
+
+@pytest.mark.parametrize("key", ["alcohol_consumption_prohibited", "11"])
+def test_get_returns_the_entry_with_its_flag(key):
+    """`get` resolves either identifier and reports enablement."""
+    registry = PolicyRegistry()
+    registry.add(FULL_POLICY)
+
+    entry = registry.get(key)
+
+    assert entry is not None
+    assert entry.policy.risk_group == "alcohol_consumption_prohibited"
+    assert entry.enabled is True
+
+
+def test_get_reports_a_miss():
+    """A key nothing matches is a `None`, not an error."""
+    registry = PolicyRegistry()
+    registry.add(FULL_POLICY)
+
+    assert registry.get("no_such_policy") is None
+
+
+def test_an_empty_key_matches_nothing():
+    """An empty key must not collide with policies that carry no `risk_group_id`.
+
+    Those hold it as the empty string, so a naive comparison would match the first one and
+    delete an unrelated policy.
+    """
+    registry = PolicyRegistry()
+    registry.add(SCHEMA_TEMPLATE)  # risk_group_id is absent, so it is ""
+
+    assert registry.get("") is None
+    assert registry.remove("") is False
+    assert registry.set_enabled("", False) is False
+    assert len(registry) == 1
+
+
+def test_entries_is_a_snapshot():
+    """Mutating the returned list cannot change what the proxy enforces."""
+    registry = PolicyRegistry()
+    registry.add(FULL_POLICY)
+
+    registry.entries().clear()
+
+    assert len(registry) == 1

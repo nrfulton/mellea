@@ -16,6 +16,11 @@ Without a response hook the byte-for-byte streaming passthrough is untouched.
 
 Replies a *request* hook produced are not shown to the response hook. Those never came
 from the upstream, so there is nothing about them to screen.
+
+The policies being screened against can additionally be managed over HTTP by building the
+app with `admin=True`, which mounts the control plane in `cli.mitm.admin`. That is the one
+exception to the transparency described above: those paths are answered here rather than
+forwarded, so they are off unless asked for.
 """
 
 import importlib
@@ -47,6 +52,7 @@ from pydantic import ValidationError
 from mellea.core.utils import MelleaLogger
 from mellea.helpers.openai_compatible_helpers import chat_completion_delta_merge
 
+from .admin import ADMIN_PREFIX, build_policy_router
 from .hooks import Hook, Reply, ResponseHook, new_completion_id
 from .policy import PolicyRegistry
 
@@ -443,6 +449,8 @@ def build_app(
     *,
     response_hook: ResponseHook | None = None,
     policies: PolicyRegistry | None = None,
+    admin: bool = False,
+    admin_token: str | None = None,
     client: httpx.AsyncClient | None = None,
     timeout: float = 600.0,
 ) -> FastAPI:
@@ -459,6 +467,13 @@ def build_app(
             into a response hook that declares a `policies` parameter. A fresh empty
             registry is created if omitted; add to it at any time and the next request is
             screened against it.
+        admin: Mount the `cli.mitm.admin` control plane, letting clients list and edit the
+            policy registry over HTTP. Off by default, because those paths otherwise
+            forward upstream like any other and mounting them is what stops the proxy
+            being perfectly transparent.
+        admin_token: Bearer token the control plane requires, or `None` to require no
+            authentication. Only leave it unset on a trusted interface: these routes can
+            delete a guardrail, and the proxy binds all interfaces by default.
         client: HTTP client used to reach the upstream. One is created and owned by
             the app if omitted; pass your own to redirect or stub the upstream, as
             the tests do.
@@ -615,6 +630,11 @@ def build_app(
     for path in CHAT_COMPLETION_PATHS:
         app.add_api_route(path, chat_completions, methods=["POST"])
 
+    # Ahead of the catch-all, which would otherwise forward every control-plane call
+    # upstream: routes are matched in registration order.
+    if admin:
+        app.include_router(build_policy_router(registry, token=admin_token))
+
     # Registered last so the chat-completion routes above win.
     app.add_api_route(
         "/{full_path:path}",
@@ -633,6 +653,8 @@ def run_server(
     timeout: float = 600.0,
     response_hook: str | None = None,
     policies: Sequence[str | Path] = (),
+    admin: bool = False,
+    admin_token: str | None = None,
 ) -> None:
     """Resolve the hooks, load any policies, and run the proxy until interrupted.
 
@@ -648,6 +670,10 @@ def run_server(
         response_hook: Response-hook specification as `module:function`, or `None` to
             relay upstream replies untouched.
         policies: Policy files, or directories of them, to load into the registry.
+        admin: Serve the policy control plane, so the policies being enforced can be
+            managed while the proxy runs instead of only at startup.
+        admin_token: Bearer token the control plane requires, or `None` for no
+            authentication.
 
     Raises:
         PolicyError: If a policy path does not exist or does not parse. Raised before the
@@ -666,8 +692,19 @@ def run_server(
         resolve_hook(hook),
         response_hook=resolved_response_hook,
         policies=registry,
+        admin=admin,
+        admin_token=admin_token,
         timeout=timeout,
     )
     hooks = hook if response_hook is None else f"{hook}, response: {response_hook}"
     typer.echo(f"Proxying http://{host}:{port} -> {upstream} (hook: {hooks})")
+    if admin:
+        typer.echo(
+            f"Policy control plane at http://{host}:{port}{ADMIN_PREFIX}/policies"
+        )
+        if not admin_token:
+            typer.echo(
+                "  Warning: no --admin-token, so anyone who can reach this port can "
+                "edit or delete the policies being enforced."
+            )
     uvicorn.run(app, host=host, port=port)

@@ -618,6 +618,50 @@ def test_policy_guard_replaces_a_violating_reply(policy_proxy, upstream_calls, c
     assert len(upstream_calls) == 1
 
 
+def test_policy_guard_ignores_a_parked_policy(policy_proxy, checked, upstream_calls):
+    """Disabling a policy stops it being screened against at all.
+
+    Not merely "the reply is allowed through": a parked policy must cost nothing, because
+    each restriction is a model call. The checker recording no calls is the assertion that
+    matters here.
+    """
+    calls = checked({DOOR_STATUS: 1.0})
+    with policy_proxy(POLICY_YAML) as client:
+        client.app.state.policies.set_enabled("pod_bay_doors", False)
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "hal-9000",
+                "messages": [{"role": "user", "content": "open the pod bay doors"}],
+            },
+        )
+
+    # The reply the upstream produced, unscreened and unreplaced.
+    assert response.json()["choices"][0]["message"]["content"] == UPSTREAM_TEXT
+    assert calls == []
+    assert len(upstream_calls) == 1
+
+
+def test_policy_guard_screens_again_once_a_policy_is_re_enabled(policy_proxy, checked):
+    """The registry is re-read per reply, so a toggle takes effect without a restart."""
+    checked({DOOR_STATUS: 1.0})
+    with policy_proxy(POLICY_YAML) as client:
+        registry = client.app.state.policies
+        request = {
+            "model": "hal-9000",
+            "messages": [{"role": "user", "content": "open the pod bay doors"}],
+        }
+
+        registry.set_enabled("pod_bay_doors", False)
+        allowed = client.post("/v1/chat/completions", json=request)
+
+        registry.set_enabled("pod_bay_doors", True)
+        blocked = client.post("/v1/chat/completions", json=request)
+
+    assert allowed.json()["choices"][0]["message"]["content"] == UPSTREAM_TEXT
+    assert blocked.json()["choices"][0]["message"]["content"] == REPLACEMENT
+
+
 @pytest.mark.parametrize(
     "score,blocked",
     [(0.5, True), (0.49, False)],

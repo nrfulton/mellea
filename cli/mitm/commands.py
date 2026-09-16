@@ -49,6 +49,21 @@ def mitm(
             "Uses the granite.trust.policy-tools schema"
         ),
     ),
+    admin: bool = typer.Option(
+        False,
+        "--admin/--no-admin",
+        help=(
+            "Serve the policy control plane, so the policies being enforced can be "
+            "listed and edited over HTTP while the proxy runs. Off by default"
+        ),
+    ),
+    admin_token: str | None = typer.Option(
+        None,
+        help=(
+            "Bearer token the control plane requires. Strongly recommended with "
+            "--admin on any interface other than loopback"
+        ),
+    ),
     host: str = typer.Option("0.0.0.0", help="Host to bind to"),
     port: int = typer.Option(8081, help="Port to bind to"),
     timeout: float = typer.Option(
@@ -83,11 +98,20 @@ def mitm(
     turns that off: asking for `--policy` or `--response-hook` leaves the request side
     alone unless you name a `--hook` yourself.
 
+    Policies are otherwise fixed at startup. Passing `--admin` mounts a control plane at
+    `/_mitm/policies` that lists, creates, replaces, enables, disables, and deletes them
+    while the proxy runs, each change taking effect on the next reply screened. It is off
+    by default because those paths are forwarded upstream like any other until it is on,
+    and because it can remove a guardrail: since the proxy binds every interface by
+    default, pair `--admin` with `--admin-token`, or bind it to loopback, or both.
+
     Prerequisites:
         Mellea installed with server dependency group (`uv add 'mellea[server]'`).
         A running OpenAI-compatible server to front.
         For `--policy`, the Hugging Face extra (`uv add 'mellea[hf]'`); the adapter
         weights are downloaded on the first screened reply.
+        Nothing extra for `--admin`: the control plane parses policies without any
+        model present.
 
     Output:
         Starts a long-running HTTP proxy on the specified host and port. Point any
@@ -99,6 +123,8 @@ def mitm(
         m mitm --upstream http://localhost:8000 --hook my_checks.py:block_pii --port 9000
 
         m mitm --upstream http://localhost:11434 --policy policies/alcohol_prohibited.yaml
+
+        m mitm --upstream http://localhost:11434 --policy policies/ --admin --host 127.0.0.1
 
     See Also:
         guide: integrations/m-serve
@@ -114,4 +140,6 @@ def mitm(
         timeout=timeout,
         response_hook=screening,
         policies=policy,
+        admin=admin,
+        admin_token=admin_token,
     )
