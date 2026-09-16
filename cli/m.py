@@ -4,9 +4,10 @@
 """Entrypoint for the `m` command-line tool.
 
 Wires together all CLI sub-applications into a single Typer root command: `m serve`
-(start a model-serving endpoint), `m alora` (train and upload LoRA/aLoRA adapters),
-`m decompose` (LLM-driven task decomposition), and `m eval` (test-based model
-evaluation). Run `m --help` to see all available sub-commands.
+(start a model-serving endpoint), `m proxy` (OpenAI-compatible proxy server),
+`m alora` (train and upload LoRA/aLoRA adapters), `m decompose` (LLM-driven task
+decomposition), and `m eval` (test-based model evaluation). Run `m --help` to see
+all available sub-commands.
 """
 
 try:
@@ -21,6 +22,7 @@ from cli.alora.commands import alora_app
 from cli.decompose import app as decompose_app
 from cli.eval.commands import eval_app
 from cli.fix import fix_app
+from cli.proxy.commands import proxy
 from cli.serve.commands import serve
 
 cli = typer.Typer(name="m", no_args_is_help=True)
@@ -31,10 +33,10 @@ cli = typer.Typer(name="m", no_args_is_help=True)
 def callback() -> None:
     """Mellea command-line tool for LLM-powered workflows.
 
-    Provides sub-commands for serving models (`m serve`), training and uploading
-    adapters (`m alora`), decomposing tasks into subtasks (`m decompose`),
-    running test-based evaluation pipelines (`m eval`), and applying automated
-    code migrations (`m fix`).
+    Provides sub-commands for serving models (`m serve`), proxying requests to
+    upstream endpoints (`m proxy`), training and uploading adapters (`m alora`),
+    decomposing tasks into subtasks (`m decompose`), running test-based evaluation
+    pipelines (`m eval`), and applying automated code migrations (`m fix`).
 
     Prerequisites:
         Mellea installed (`uv add mellea`).
@@ -49,6 +51,7 @@ def callback() -> None:
 # as if added with @cli.command() (ie `m serve` here). If we don't use this
 # approach, we would have to use `m server <subcommand>` instead.
 cli.command(name="serve")(serve)
+cli.command(name="proxy")(proxy)
 
 # Add new subcommand groups by importing and adding with `cli.add_typer()`
 # as documented: https://typer.tiangolo.com/tutorial/subcommands/add-typer/#put-them-together.
